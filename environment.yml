@@ -1,0 +1,29 @@
+name: carbon-monitor
+channels:
+  - conda-forge
+  - defaults
+dependencies:
+  - python=3.11
+  - gdal
+  - rasterio
+  - shapely
+  - geopandas
+  - pyproj
+  - numpy
+  - pandas
+  - matplotlib
+  - pip
+  - pip:
+    - fastapi
+    - uvicorn[standard]
+    - pydantic>=2.0
+    - pydantic-settings
+    - mlflow
+    - streamlit
+    - requests
+    - python-dotenv
+    - pytest
+    - httpx
+    - torch
+    - torchvision
+    - transformers

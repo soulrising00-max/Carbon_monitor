@@ -1,0 +1,401 @@
+{
+  "type": "FeatureCollection",
+  "features": [
+    {
+      "type": "Feature",
+      "properties": {
+        "tile_id": "T43PHR"
+      },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              78.0,
+              13.0
+            ],
+            [
+              79.0,
+              13.0
+            ],
+            [
+              79.0,
+              14.0
+            ],
+            [
+              78.0,
+              14.0
+            ],
+            [
+              78.0,
+              13.0
+            ]
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "tile_id": "T44PKA"
+      },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              78.0,
+              13.0
+            ],
+            [
+              79.0,
+              13.0
+            ],
+            [
+              79.0,
+              14.0
+            ],
+            [
+              78.0,
+              14.0
+            ],
+            [
+              78.0,
+              13.0
+            ]
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "tile_id": "T43PHQ"
+      },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              78.0,
+              12.0
+            ],
+            [
+              79.0,
+              12.0
+            ],
+            [
+              79.0,
+              14.0
+            ],
+            [
+              78.0,
+              14.0
+            ],
+            [
+              78.0,
+              12.0
+            ]
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "tile_id": "T43PHP"
+      },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              78.0,
+              12.0
+            ],
+            [
+              79.0,
+              12.0
+            ],
+            [
+              79.0,
+              13.0
+            ],
+            [
+              78.0,
+              13.0
+            ],
+            [
+              78.0,
+              12.0
+            ]
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "tile_id": "T44NLP"
+      },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              79.0,
+              8.0
+            ],
+            [
+              80.0,
+              8.0
+            ],
+            [
+              80.0,
+              9.0
+            ],
+            [
+              79.0,
+              9.0
+            ],
+            [
+              79.0,
+              8.0
+            ]
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "tile_id": "T43QHA"
+      },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              78.0,
+              17.0
+            ],
+            [
+              79.0,
+              17.0
+            ],
+            [
+              79.0,
+              18.0
+            ],
+            [
+              78.0,
+              18.0
+            ],
+            [
+              78.0,
+              17.0
+            ]
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "tile_id": "T44QKH"
+      },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              79.0,
+              20.0
+            ],
+            [
+              80.0,
+              20.0
+            ],
+            [
+              80.0,
+              21.0
+            ],
+            [
+              79.0,
+              21.0
+            ],
+            [
+              79.0,
+              20.0
+            ]
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "tile_id": "T18NTJ"
+      },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              -77.0,
+              3.0
+            ],
+            [
+              -76.0,
+              3.0
+            ],
+            [
+              -76.0,
+              4.0
+            ],
+            [
+              -77.0,
+              4.0
+            ],
+            [
+              -77.0,
+              3.0
+            ]
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "tile_id": "T18MUA"
+      },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              -76.0,
+              -5.0
+            ],
+            [
+              -75.0,
+              -5.0
+            ],
+            [
+              -75.0,
+              -4.0
+            ],
+            [
+              -76.0,
+              -4.0
+            ],
+            [
+              -76.0,
+              -5.0
+            ]
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "tile_id": "T55HFC"
+      },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              149.0,
+              -34.0
+            ],
+            [
+              150.0,
+              -34.0
+            ],
+            [
+              150.0,
+              -33.0
+            ],
+            [
+              149.0,
+              -33.0
+            ],
+            [
+              149.0,
+              -34.0
+            ]
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "tile_id": "T36MZA"
+      },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              36.0,
+              -4.0
+            ],
+            [
+              37.0,
+              -4.0
+            ],
+            [
+              37.0,
+              -3.0
+            ],
+            [
+              36.0,
+              -3.0
+            ],
+            [
+              36.0,
+              -4.0
+            ]
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "tile_id": "T36MZB"
+      },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              36.0,
+              -4.0
+            ],
+            [
+              37.0,
+              -4.0
+            ],
+            [
+              37.0,
+              -2.0
+            ],
+            [
+              36.0,
+              -2.0
+            ],
+            [
+              36.0,
+              -4.0
+            ]
+          ]
+        ]
+      }
+    }
+  ]
+}

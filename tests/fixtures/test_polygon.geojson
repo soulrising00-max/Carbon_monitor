@@ -1,0 +1,19 @@
+{
+  "type": "FeatureCollection",
+  "features": [
+    {
+      "type": "Feature",
+      "properties": {"name": "test_polygon_karnataka"},
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [[
+          [78.475, 13.475],
+          [78.525, 13.475],
+          [78.525, 13.525],
+          [78.475, 13.525],
+          [78.475, 13.475]
+        ]]
+      }
+    }
+  ]
+}
