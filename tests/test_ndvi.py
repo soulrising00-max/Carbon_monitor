@@ -266,12 +266,11 @@ def test_reconstruct_from_patches_shape_and_placement():
     patch_size = 128
     full_h, full_w = 256, 256
 
-    # Quadrants: (0,0)=False, (0,128)=True, (128,0)=False, (128,128)=True
     patches = [
-        {"mask": np.zeros((patch_size, patch_size), dtype=bool), "row": 0, "col": 0},
-        {"mask": np.ones((patch_size, patch_size), dtype=bool), "row": 0, "col": 128},
+        {"mask": np.zeros((patch_size, patch_size), dtype=bool), "row": 0,   "col": 0},
+        {"mask": np.ones((patch_size, patch_size),  dtype=bool), "row": 0,   "col": 128},
         {"mask": np.zeros((patch_size, patch_size), dtype=bool), "row": 128, "col": 0},
-        {"mask": np.ones((patch_size, patch_size), dtype=bool), "row": 128, "col": 128},
+        {"mask": np.ones((patch_size, patch_size),  dtype=bool), "row": 128, "col": 128},
     ]
 
     result = reconstruct_from_patches(patches, full_h, full_w)
@@ -287,8 +286,8 @@ def test_reconstruct_from_patches_all_true():
     from src.prithvi import reconstruct_from_patches
 
     patches = [
-        {"mask": np.ones((128, 128), dtype=bool), "row": 0, "col": 0},
-        {"mask": np.ones((128, 128), dtype=bool), "row": 0, "col": 128},
+        {"mask": np.ones((128, 128), dtype=bool), "row": 0,   "col": 0},
+        {"mask": np.ones((128, 128), dtype=bool), "row": 0,   "col": 128},
         {"mask": np.ones((128, 128), dtype=bool), "row": 128, "col": 0},
         {"mask": np.ones((128, 128), dtype=bool), "row": 128, "col": 128},
     ]
@@ -297,10 +296,79 @@ def test_reconstruct_from_patches_all_true():
 
 
 # ---------------------------------------------------------------------------
-# Prithvi integration stub
+# confusion_matrix_stats  (new)
+# ---------------------------------------------------------------------------
+
+
+def test_confusion_matrix_known_values():
+    """
+    Manual setup: TP=3, FP=1, FN=1, TN=5
+    precision = 3/4 = 0.75
+    recall    = 3/4 = 0.75
+    f1        = 0.75
+    iou       = 3/5 = 0.6
+    accuracy  = 8/10 = 0.8
+    """
+    from src.ndvi import confusion_matrix_stats
+
+    predicted = np.array([True, True, True, True, False, False, False, False, False, False])
+    true      = np.array([True, True, True, False, True, False, False, False, False, False])
+
+    result = confusion_matrix_stats(predicted, true)
+
+    assert result["TP"] == 3
+    assert result["FP"] == 1
+    assert result["FN"] == 1
+    assert result["TN"] == 5
+    assert result["precision"] == pytest.approx(0.75)
+    assert result["recall"]    == pytest.approx(0.75)
+    assert result["f1"]        == pytest.approx(0.75)
+    assert result["iou"]       == pytest.approx(0.6)
+    assert result["accuracy"]  == pytest.approx(0.8)
+
+
+def test_confusion_matrix_all_zero_predicted():
+    """All predictions negative — precision/f1/iou = 0, TN = all pixels."""
+    from src.ndvi import confusion_matrix_stats
+
+    predicted = np.zeros((4, 4), dtype=bool)
+    true      = np.ones((4, 4), dtype=bool)
+
+    result = confusion_matrix_stats(predicted, true)
+
+    assert result["TP"] == 0
+    assert result["FP"] == 0
+    assert result["FN"] == 16
+    assert result["TN"] == 0
+    assert result["precision"] == 0.0
+    assert result["recall"]    == 0.0
+    assert result["f1"]        == 0.0
+    assert result["iou"]       == 0.0
+    assert result["accuracy"]  == 0.0
+
+
+def test_confusion_matrix_perfect_prediction():
+    """Perfect match — all metrics = 1.0, FP = FN = 0."""
+    from src.ndvi import confusion_matrix_stats
+
+    mask   = np.array([True, False, True, False, True], dtype=bool)
+    result = confusion_matrix_stats(mask, mask)
+
+    assert result["FP"] == 0
+    assert result["FN"] == 0
+    assert result["accuracy"]  == pytest.approx(1.0)
+    assert result["precision"] == pytest.approx(1.0)
+    assert result["recall"]    == pytest.approx(1.0)
+    assert result["f1"]        == pytest.approx(1.0)
+    assert result["iou"]       == pytest.approx(1.0)
+
+
+# ---------------------------------------------------------------------------
+# Prithvi / U-Net integration stub
 # ---------------------------------------------------------------------------
 
 
 @pytest.mark.integration
-def test_prithvi_load_and_inference():
-    pytest.skip("requires Prithvi model download")
+def test_unet_load_and_inference():
+    """Requires unet_forest.pth in ml_models/ — skipped in unit test runs."""
+    pytest.skip("requires trained weights in ml_models/unet_forest.pth")

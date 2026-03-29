@@ -74,3 +74,52 @@
 - api/main.py: RESULTS_DIR created at startup before StaticFiles mount to avoid 500 on first run
 - tests/test_api.py: asyncio_mode = auto required in pytest.ini
 - Affects: Stage 8 (dashboard reads /static/ URLs; ensure RESULTS_DIR exists before starting)
+## Stage ML-1 — Model swap: Prithvi-100M → ForestUNet
+
+### src/prithvi.py
+- Changed: replaced Prithvi-100M HuggingFace loader with ForestUNet (lightweight U-Net, ~7M params)
+- Reason: Prithvi-100M requires CUDA and trust_remote_code; not runnable on CPU laptop
+- All four public function signatures are IDENTICAL — pipeline.py untouched:
+    load_prithvi_model(device)           → (model, config)
+    run_prithvi_inference(patch, m, c)   → (128, 128) bool mask
+    evaluate_against_hansen(pred, true)  → {iou, precision, recall, f1}
+    reconstruct_from_patches(patches, H, W) → (H, W) bool array
+- Affects: nothing downstream
+
+### models/unet.py  (NEW FILE)
+- ForestUNet class: 6-band input → 1-channel logit output, ~7M parameters
+- DoubleConv / Down / Up building blocks
+- logits_to_mask() convenience function
+- Trained separately on Kaggle (see notebooks/training.ipynb)
+
+### ml_models/unet_forest.pth  (PLACEHOLDER — you add this)
+- Default weight path: ml_models/unet_forest.pth
+- If missing: pipeline runs with random weights, IoU will be low,
+  NDVI fallback triggers automatically (existing pipeline behaviour)
+- After Kaggle training: drop .pth here, no code changes needed
+
+### src/ndvi.py
+- Added: confusion_matrix_stats(predicted_mask, true_mask) → dict
+- Returns: TP, FP, FN, TN, accuracy, precision, recall, f1, iou
+- Use for full-raster evaluation after patch reconstruction
+- evaluate_against_hansen() in prithvi.py unchanged (patch-level only)
+
+### tests/test_ndvi.py
+- Added 3 tests for confusion_matrix_stats:
+    test_confusion_matrix_known_values
+    test_confusion_matrix_all_zero_predicted
+    test_confusion_matrix_perfect_prediction
+- Updated integration stub: test_unet_load_and_inference (skip marker)
+- All 15 existing tests unchanged
+
+### notebooks/training.ipynb  (NEW FILE)
+- Kaggle-ready training notebook
+- Sections: install → config → data prep (Option A: Kaggle dataset / Option B: raw GeoTIFFs)
+  → Dataset/DataLoader → ForestUNet → BCE+Dice loss → training loop with early stopping
+  → confusion matrix evaluation → visual predictions → download instructions
+- Exports: unet_forest.pth (state_dict wrapped in checkpoint dict)
+
+### Upgrade path
+- Phase 1 (now):    Random weights → pipeline works end-to-end, NDVI fallback active
+- Phase 2 (Kaggle): Train on Hansen+Sentinel-2, download unet_forest.pth
+- Phase 3 (later):  Swap DoubleConv encoder for ResNet-18 backbone in models/unet.py only

@@ -130,3 +130,63 @@ def ndvi_stats(ndvi: np.ndarray) -> dict:
         "max": float(np.max(valid)),
         "std": float(np.std(valid)),
     }
+
+
+def confusion_matrix_stats(
+    predicted_mask: np.ndarray,
+    true_mask: np.ndarray,
+) -> dict:
+    """
+    Compute pixel-level confusion matrix and derived metrics.
+
+    Use this on the full reconstructed raster after all patches are assembled.
+    For patch-level evaluation use evaluate_against_hansen() in prithvi.py.
+
+    Args:
+        predicted_mask: boolean array of any shape — model or NDVI predictions
+        true_mask:      boolean array, same shape — Hansen GFC labels
+
+    Returns:
+        {
+            "TP": int,        true positives  (predicted forest loss, was forest loss)
+            "FP": int,        false positives (predicted forest loss, was not)
+            "FN": int,        false negatives (missed forest loss)
+            "TN": int,        true negatives  (correctly predicted no loss)
+            "accuracy":   float,
+            "precision":  float,
+            "recall":     float,
+            "f1":         float,
+            "iou":        float,   Jaccard index for the positive class
+        }
+
+    Notes:
+        - All float metrics return 0.0 when the denominator is zero
+        - Both inputs are cast to bool so float masks work transparently
+    """
+    predicted = predicted_mask.astype(bool).ravel()
+    true      = true_mask.astype(bool).ravel()
+
+    tp = int(np.sum( predicted &  true))
+    fp = int(np.sum( predicted & ~true))
+    fn = int(np.sum(~predicted &  true))
+    tn = int(np.sum(~predicted & ~true))
+
+    total     = tp + fp + fn + tn
+    accuracy  = (tp + tn) / total               if total          > 0 else 0.0
+    precision = tp / (tp + fp)                  if (tp + fp)      > 0 else 0.0
+    recall    = tp / (tp + fn)                  if (tp + fn)      > 0 else 0.0
+    f1        = (2 * precision * recall / (precision + recall)) \
+                if (precision + recall) > 0 else 0.0
+    iou       = tp / (tp + fp + fn)             if (tp + fp + fn) > 0 else 0.0
+
+    return {
+        "TP":        tp,
+        "FP":        fp,
+        "FN":        fn,
+        "TN":        tn,
+        "accuracy":  float(accuracy),
+        "precision": float(precision),
+        "recall":    float(recall),
+        "f1":        float(f1),
+        "iou":       float(iou),
+    }

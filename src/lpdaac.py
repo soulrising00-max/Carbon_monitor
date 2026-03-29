@@ -34,6 +34,7 @@ _L30_BAND_MAP: dict[str, str] = {"B8A": "B05", "B11": "B06", "B12": "B07"}
 # Internal helpers
 # ---------------------------------------------------------------------------
 
+
 class _EarthdataSession(requests.Session):
     """
     requests.Session that re-attaches Basic auth on every redirect back to
@@ -110,10 +111,7 @@ def _sensor_bands(granule_id: str) -> list[str]:
 def _expected_band_filenames(granule_id: str) -> set[str]:
     """Return the exact GeoTIFF filenames expected for a granule download."""
     base_id = granule_id[:-5] if granule_id.endswith(".v2.0") else granule_id
-    return {
-        f"{base_id}.v2.0.{band}.tif"
-        for band in _sensor_bands(granule_id)
-    }
+    return {f"{base_id}.v2.0.{band}.tif" for band in _sensor_bands(granule_id)}
 
 
 def _bbox_from_tile(
@@ -133,12 +131,14 @@ def _cmr_search_bbox(short_name: str, bbox: tuple, year: int) -> list[dict]:
     Returns raw entry list; empty list on any error.
     """
     min_lon, min_lat, max_lon, max_lat = bbox
+    
     url = (
         f"https://cmr.earthdata.nasa.gov/search/granules.json"
         f"?short_name={short_name}"
         f"&temporal[]={year}-01-01T00:00:00Z,{year}-12-31T23:59:59Z"
         f"&bounding_box={min_lon},{min_lat},{max_lon},{max_lat}"
         f"&page_size=100"
+        f"&sort_key[]=cloud_cover"
     )
     try:
         resp = requests.get(url, timeout=60)
@@ -154,6 +154,7 @@ def _cmr_search_bbox(short_name: str, bbox: tuple, year: int) -> list[dict]:
 # ---------------------------------------------------------------------------
 # Public API
 # ---------------------------------------------------------------------------
+
 
 def search_scenes(
     tile_id: str,
@@ -277,7 +278,9 @@ def download_scene(
     # Cache-hit check: all expected filenames already on disk?
     needed_names = _expected_band_filenames(granule_id)
     if cache_path.exists():
-        existing_tifs = [f for f in cache_path.iterdir() if f.is_file() and f.suffix == ".tif"]
+        existing_tifs = [
+            f for f in cache_path.iterdir() if f.is_file() and f.suffix == ".tif"
+        ]
         existing_names = {f.name for f in existing_tifs}
         if needed_names and needed_names.issubset(existing_names):
             logger.info("Cache hit for %s — skipping download.", granule_id)
