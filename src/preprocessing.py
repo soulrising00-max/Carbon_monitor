@@ -202,6 +202,12 @@ def clip_to_polygon(
             clipped, clipped_transform = rio_mask(
                 src, geom_json, crop=True, filled=True, nodata=0
             )
+            if np.count_nonzero(clipped) == 0:
+                raise RuntimeError(
+                    f"clip_to_polygon returned all-zero data — clip geometry likely fell "
+                    f"outside the raster extent. Raster CRS: {src.crs}, "
+                    f"geometry bounds: {geom.bounds}"
+                )
 
     if save_path is not None:
         save_path = Path(save_path)

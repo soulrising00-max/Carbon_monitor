@@ -69,24 +69,101 @@ def _swap_xy_geometry(geom):
 
 
 def _ndvi_overlay_png(before: np.ndarray, after: np.ndarray, save_path: Path) -> None:
-    """Save side-by-side NDVI before/after as PNG."""
+    """Save an interpretation-friendly NDVI comparison PNG."""
+    import matplotlib
+
+    matplotlib.use("Agg")
+
     import matplotlib.pyplot as plt
+    from matplotlib.colors import LinearSegmentedColormap
 
     before_invalid_mask = hls_invalid_pixel_mask(before)
     after_invalid_mask = hls_invalid_pixel_mask(after)
     ndvi_before = compute_ndvi(before, before_invalid_mask)
     ndvi_after = compute_ndvi(after, after_invalid_mask)
+    ndvi_delta = ndvi_after - ndvi_before
 
-    fig, axes = plt.subplots(1, 2, figsize=(12, 5))
-    axes[0].imshow(ndvi_before, cmap="RdYlGn", vmin=-1, vmax=1)
-    axes[0].set_title("NDVI — Before")
-    axes[0].axis("off")
-    axes[1].imshow(ndvi_after, cmap="RdYlGn", vmin=-1, vmax=1)
-    axes[1].set_title("NDVI — After")
-    axes[1].axis("off")
-    fig.tight_layout()
+    invalid_delta = ~np.isfinite(ndvi_before) | ~np.isfinite(ndvi_after)
+    ndvi_before_masked = np.ma.masked_invalid(ndvi_before)
+    ndvi_after_masked = np.ma.masked_invalid(ndvi_after)
+    ndvi_delta_masked = np.ma.masked_where(invalid_delta, ndvi_delta)
+
+    ndvi_cmap = LinearSegmentedColormap.from_list(
+        "ndvi_interpret",
+        ["#ead8a1", "#a8cf6a", "#1f7a4d"],
+        N=256,
+    )
+    ndvi_cmap.set_bad("#e8ece8")
+
+    delta_cmap = LinearSegmentedColormap.from_list(
+        "ndvi_delta",
+        ["#9a4f3b", "#e8d9c9", "#f7f7f4", "#c7dd9a", "#2f7d4d"],
+        N=256,
+    )
+    delta_cmap.set_bad("#e8ece8")
+
+    fig, axes = plt.subplots(1, 3, figsize=(15.5, 5.6), constrained_layout=True)
+    fig.patch.set_facecolor("#f7faf8")
+
+    for ax in axes:
+        ax.set_facecolor("#f7faf8")
+        ax.axis("off")
+
+    before_im = axes[0].imshow(ndvi_before_masked, cmap=ndvi_cmap, vmin=0.0, vmax=1.0)
+    axes[0].set_title("NDVI - Before", fontsize=18, fontweight="bold")
+
+    after_im = axes[1].imshow(ndvi_after_masked, cmap=ndvi_cmap, vmin=0.0, vmax=1.0)
+    axes[1].set_title("NDVI - After", fontsize=18, fontweight="bold")
+
+    delta_im = axes[2].imshow(ndvi_delta_masked, cmap=delta_cmap, vmin=-0.4, vmax=0.4)
+    axes[2].set_title("NDVI Change", fontsize=18, fontweight="bold")
+
+    before_cb = fig.colorbar(before_im, ax=axes[0], fraction=0.048, pad=0.03)
+    before_cb.set_label(
+        "Lower vegetation vigor  <->  Higher vegetation vigor", fontsize=9
+    )
+    before_cb.set_ticks([0.2, 0.5, 0.8])
+    before_cb.set_ticklabels(["Low", "Moderate", "High"])
+
+    after_cb = fig.colorbar(after_im, ax=axes[1], fraction=0.048, pad=0.03)
+    after_cb.set_label(
+        "Lower vegetation vigor  <->  Higher vegetation vigor", fontsize=9
+    )
+    after_cb.set_ticks([0.2, 0.5, 0.8])
+    after_cb.set_ticklabels(["Low", "Moderate", "High"])
+
+    delta_cb = fig.colorbar(delta_im, ax=axes[2], fraction=0.048, pad=0.03)
+    delta_cb.set_label("Decline  <->  Recovery", fontsize=9)
+    delta_cb.set_ticks([-0.3, 0.0, 0.3])
+    delta_cb.set_ticklabels(["Decline", "Stable", "Recovery"])
+
+    valid_change = ndvi_delta[np.isfinite(ndvi_delta)]
+    if valid_change.size:
+        mean_change = float(valid_change.mean())
+        direction = (
+            "decline"
+            if mean_change < -0.02
+            else "recovery" if mean_change > 0.02 else "stable conditions"
+        )
+        summary = (
+            f"Average NDVI change: {mean_change:+.3f} ({direction}). "
+            "Brown tones indicate loss of vegetation signal; green tones indicate stronger vegetation in the end year."
+        )
+    else:
+        summary = (
+            "NDVI change panel is unavailable where before/after pixels were invalid."
+        )
+
+    fig.suptitle(
+        "NDVI comparison across the selected monitoring years",
+        fontsize=16,
+        fontweight="semibold",
+        y=1.02,
+    )
+    fig.text(0.5, 0.02, summary, ha="center", fontsize=10, color="#405248")
+
     save_path.parent.mkdir(parents=True, exist_ok=True)
-    fig.savefig(save_path, dpi=150, bbox_inches="tight")
+    fig.savefig(save_path, dpi=170, bbox_inches="tight", facecolor=fig.get_facecolor())
     plt.close(fig)
 
 
@@ -111,15 +188,15 @@ def _read_cache_to_array(
     for band in band_order:
         # Try the canonical (S30 / settings) name first
         matches = [
-            f for f in cache_path.glob("*.tif")
-            if f.name.endswith(f".{band}.tif")
+            f for f in cache_path.glob("*.tif") if f.name.endswith(f".{band}.tif")
         ]
         if not matches:
             # Try the L30 equivalent
             alt = _L30_BAND_MAP.get(band)
             if alt:
                 matches = [
-                    f for f in cache_path.glob("*.tif")
+                    f
+                    for f in cache_path.glob("*.tif")
                     if f.name.endswith(f".{alt}.tif")
                 ]
         if not matches:
@@ -169,13 +246,22 @@ def _resolve_scenes_with_fallback(
     Order:
     1. requested_year at configured cloud threshold
     2. requested_year at 0.8
-    3. requested_year - 1 at 0.8
+    3. requested_year - 1..window at 0.8
+    4. requested_year - 1..window at 0.95
     """
+    same_year_cloud = max(settings.CLOUD_COVER_THRESHOLD, 0.80)
     candidates = [
         (requested_year, settings.CLOUD_COVER_THRESHOLD),
-        (requested_year, 0.8),
-        (requested_year - 1, 0.8),
+        (requested_year, same_year_cloud),
     ]
+    for delta in range(1, settings.SCENE_SEARCH_YEAR_WINDOW + 1):
+        fallback_year = requested_year - delta
+        if fallback_year >= 2013:
+            candidates.append((fallback_year, same_year_cloud))
+    for delta in range(1, settings.SCENE_SEARCH_YEAR_WINDOW + 1):
+        fallback_year = requested_year - delta
+        if fallback_year >= 2013:
+            candidates.append((fallback_year, 0.95))
 
     for search_year, cloud_max in candidates:
         if search_year < 2013:
@@ -206,13 +292,43 @@ def run_pipeline(
         "status": "running",
         "project_id": project_id,
         "created_at": created_at,
+        "stage": "Starting…",
+        "step": 0,
+        "total_steps": 8,
+        "downloads_total": 0,
+        "downloads_done": 0,
+        "downloads_cached": 0,
+        "current_download": None,
     }
     warnings: list[str] = []
     diagnostics: dict[str, object] = {}
     update_run(run_id, project_id=project_id, status="running", warnings=warnings)
 
+    def _progress(step: int, stage: str, total_steps: int = 8) -> None:
+        """Write current progress into the results store without changing status."""
+        results_store[project_id].update({
+            "stage": stage,
+            "step": step,
+            "total_steps": total_steps,
+        })
+
+    def _dl_progress(
+        total: int,
+        done: int,
+        cached: int,
+        current: str | None = None,
+    ) -> None:
+        """Update download counters in the results store (called during step 3)."""
+        results_store[project_id].update({
+            "downloads_total": total,
+            "downloads_done": done,
+            "downloads_cached": cached,
+            "current_download": current,
+        })
+
     try:
         # ── 1. Validate ──────────────────────────────────────────────────────
+        _progress(1, "Validating input geometry and years…")
         geometries, err = validate_analyze_request(
             req.geojson, req.start_year, req.end_year
         )
@@ -231,6 +347,7 @@ def run_pipeline(
         end_year: int = req.end_year
 
         # ── 2. Biome params ──────────────────────────────────────────────────
+        _progress(2, "Detecting biome and covering MGRS tiles…")
         union_geom = unary_union(geometries)
         centroid = union_geom.centroid
         params = biome_params(centroid.y)
@@ -270,7 +387,17 @@ def run_pipeline(
                 )
 
         # ── 4. Scene discovery + download ─────────────────────────────────────
+        _progress(3, "Searching for HLS scenes…")
         union_geom = unary_union(geometries)
+        # Strip Z coordinates — pyproj transformer behaviour with 3D geometries
+        # is version-dependent and can silently corrupt the reprojected geometry.
+        if union_geom.has_z:
+            from shapely.ops import transform as _strip_z
+
+            union_geom = _strip_z(lambda x, y, z=None: (x, y), union_geom)
+            warnings.append(
+                "Input polygon had Z coordinates; stripped to 2D for processing."
+            )
         centroid = union_geom.centroid
         params = biome_params(centroid.y)
         biome = params["biome"]
@@ -299,9 +426,26 @@ def run_pipeline(
                 "No covering MGRS tile found locally; falling back to polygon bounding-box scene search."
             )
 
+        n_years = 2
+        n_tiles = len(search_targets) if search_targets else 1
+        total_scene_steps = n_years * n_tiles
+        # Estimate total downloads (n_years × n_tiles × scenes_per_year); updated to
+        # the real count once scene lists are known.
+        _estimated_total = n_years * n_tiles * settings.SCENES_PER_YEAR
+        _dl_done = 0
+        _dl_cached = 0
+        _dl_total = _estimated_total
+        _dl_progress(_dl_total, _dl_done, _dl_cached)
+
         for year in (start_year, end_year):
-            for tile in search_targets:
+            for tile_idx, tile in enumerate(search_targets):
                 target_tile_id = tile["tile_id"]
+                year_label = "start" if year == start_year else "end"
+                _progress(
+                    3,
+                    f"Searching scenes — tile {tile_idx + 1}/{n_tiles}, "
+                    f"{year_label} year {year} ({target_tile_id})…",
+                )
                 restrict_to_tile = tile.get("restrict_to_tile", True)
                 tile_diag = {
                     "tile_id": target_tile_id,
@@ -319,12 +463,10 @@ def run_pipeline(
                     bbox,
                     restrict_to_tile,
                 )
-                print("Scenes fetched:", len(scenes))
                 tile_diag["scenes_found"] = len(scenes)
                 tile_diag["search_year_used"] = search_year
                 tile_diag["cloud_threshold_used"] = cloud_max
                 valid_scenes = select_top_scenes(scenes, settings.SCENES_PER_YEAR)
-                print("Scenes after filtering:", len(valid_scenes))
                 if scenes and cloud_max > settings.CLOUD_COVER_THRESHOLD:
                     warnings.append(
                         f"No scenes found for tile {target_tile_id} year {year} "
@@ -337,18 +479,46 @@ def run_pipeline(
                         f"using fallback scenes from {search_year}. This is reflected in the app warnings."
                     )
                 tile_diag["scenes_selected"] = len(valid_scenes)
+                # Refine the total count now that we know the real scene count.
+                # Replace the placeholder estimate slot with the actual scene count.
+                _dl_total = _dl_total - settings.SCENES_PER_YEAR + len(valid_scenes)
+                _dl_progress(_dl_total, _dl_done, _dl_cached)
+
                 if not valid_scenes:
                     warnings.append(
                         f"No scenes found for tile {target_tile_id} year {year}."
                     )
                     continue
 
-                for scene in valid_scenes:
+                for scene_idx, scene in enumerate(valid_scenes):
                     try:
                         cache_tile_id = (
                             target_tile_id
                             if restrict_to_tile
                             else scene.get("actual_tile_id", target_tile_id)
+                        )
+                        # Determine expected cache path and check BEFORE downloading
+                        # so we can correctly label hits vs fresh downloads.
+                        expected_cache = (
+                            settings.CACHE_DIR
+                            / cache_tile_id
+                            / str(search_year)
+                            / scene["granule_id"]
+                        )
+                        _already_cached = validate_download(expected_cache)
+
+                        _dl_progress(
+                            _dl_total,
+                            _dl_done,
+                            _dl_cached,
+                            current=None if _already_cached else scene["granule_id"],
+                        )
+                        _progress(
+                            3,
+                            f"{'Using cached' if _already_cached else 'Downloading'} "
+                            f"{scene['granule_id']} "
+                            f"(scene {scene_idx + 1}/{len(valid_scenes)}, "
+                            f"tile {target_tile_id}, year {year})…",
                         )
                         cache_path = download_scene(
                             scene["granule_id"],
@@ -361,7 +531,14 @@ def run_pipeline(
                             warnings.append(
                                 f"Download validation failed for {scene['granule_id']}."
                             )
+                            _dl_done += 1
+                            _dl_progress(_dl_total, _dl_done, _dl_cached, current=None)
                             continue
+                        if _already_cached:
+                            _dl_cached += 1
+                        else:
+                            _dl_done += 1
+                        _dl_progress(_dl_total, _dl_done, _dl_cached, current=None)
 
                         # Cloud masking
                         fmask_candidates = list(cache_path.glob("*Fmask*"))
@@ -375,7 +552,9 @@ def run_pipeline(
                                 cloud_mask = compute_cloud_mask(
                                     fmask_candidates[0],
                                     union_geom,
-                                    band_paths=band_paths if len(band_paths) == 3 else None,
+                                    band_paths=(
+                                        band_paths if len(band_paths) == 3 else None
+                                    ),
                                 )
                                 cloud_fractions.append(unusable_fraction(cloud_mask))
                             except Exception as exc:  # noqa: BLE001
@@ -393,6 +572,7 @@ def run_pipeline(
         diagnostics["year_diagnostics"] = year_diagnostics
 
         # ── 5. Mosaic → clip → align ─────────────────────────────────────────
+        _progress(4, "Mosaicking tiles and clipping to polygon boundary…")
         target_crs = utm_crs_from_centroid(centroid.x, centroid.y)
         proj_results_dir = settings.RESULTS_DIR / project_id
         proj_results_dir.mkdir(parents=True, exist_ok=True)
@@ -462,6 +642,7 @@ def run_pipeline(
         )
 
         # ── 6. Normalize + patches ───────────────────────────────────────────
+        _progress(5, "Normalising bands and generating image patches…")
         # Strip QA band (index 6 = Fmask); keep 6 spectral bands only
         before_spec = before_data[:6]
         after_spec = after_data[:6]
@@ -473,6 +654,9 @@ def run_pipeline(
         before_norm = normalize_bands(before_spec, before_invalid_mask)
         after_norm = normalize_bands(after_spec, after_invalid_mask)
 
+        # Keep raw spectral patches for NDVI-derived products; normalization is
+        # only appropriate for model inference, not for reflectance indices.
+        raw_patches = generate_patches(before_spec, after_spec, settings.PATCH_SIZE)
         patches = generate_patches(before_norm, after_norm, settings.PATCH_SIZE)
         before_invalid_patches = generate_patches(
             before_invalid_mask[np.newaxis, ...].astype(np.uint8),
@@ -488,26 +672,26 @@ def run_pipeline(
         full_h, full_w = before_norm.shape[1], before_norm.shape[2]
 
         # ── 7. NDVI baseline masks ────────────────────────────────────────────
+        _progress(6, f"Computing NDVI forest masks ({len(raw_patches)} patches)…")
         ndvi_patch_masks: list[dict] = []
-        for i, patch in enumerate(patches):
+        for i, raw_patch in enumerate(raw_patches):
             patch_before_invalid = before_invalid_patches[i]["before"][0].astype(bool)
             patch_after_invalid = after_invalid_patches[i]["before"][0].astype(bool)
             loss = compute_forest_loss_mask(
-                patch["before"],
-                patch["after"],
+                raw_patch["before"],
+                raw_patch["after"],
                 ndvi_threshold,
                 patch_before_invalid,
                 patch_after_invalid,
             )
             ndvi_patch_masks.append(
-                {"mask": loss, "row": patch["row"], "col": patch["col"]}
+                {"mask": loss, "row": raw_patch["row"], "col": raw_patch["col"]}
             )
 
         ndvi_loss_mask = reconstruct_from_patches(ndvi_patch_masks, full_h, full_w)
-        ndvi_result = ndvi_loss_mask
-        print("NDVI output exists:", ndvi_result is not None)
 
         # ── 8. Prithvi inference ──────────────────────────────────────────────
+        _progress(7, "Running model inference on patches…")
         segmentation_method = "ndvi"
         prithvi_loss_mask = None
         avg_iou = 0.0
@@ -521,7 +705,8 @@ def run_pipeline(
 
             for i, patch in enumerate(patches):
                 try:
-                    prithvi_pred = run_prithvi_inference(patch["before"], model, config)
+                    # prithvi_pred = run_prithvi_inference(patch["before"], model, config)
+                    prithvi_pred = run_prithvi_inference(patch, model, config)
                     ndvi_ref = ndvi_patch_masks[i]["mask"]
                     metrics = evaluate_against_hansen(prithvi_pred, ndvi_ref)
                     iou_scores.append(metrics["iou"])
@@ -565,8 +750,9 @@ def run_pipeline(
         )
 
         # ── 9. Risk scoring ───────────────────────────────────────────────────
-        ndvi_before = compute_ndvi(before_norm, before_invalid_mask)
-        ndvi_after = compute_ndvi(after_norm, after_invalid_mask)
+        _progress(8, "Scoring risk and generating output maps…")
+        ndvi_before = compute_ndvi(before_spec, before_invalid_mask)
+        ndvi_after = compute_ndvi(after_spec, after_invalid_mask)
         ndvi_valid, ndvi_validation_message = validate_ndvi_for_scoring(
             ndvi_before,
             ndvi_after,
@@ -581,7 +767,9 @@ def run_pipeline(
         diagnostics["ndvi_overlap_valid_fraction"] = (
             (overlap_valid_pixels / total_ndvi_pixels) if total_ndvi_pixels else 0.0
         )
-        diagnostics["ndvi_min_valid_fraction_required"] = settings.MIN_VALID_NDVI_FRACTION
+        diagnostics["ndvi_min_valid_fraction_required"] = (
+            settings.MIN_VALID_NDVI_FRACTION
+        )
         diagnostics["ndvi_min_valid_pixels_required"] = settings.MIN_VALID_NDVI_PIXELS
         diagnostics["ndvi_valid_for_scoring"] = ndvi_valid
         if not ndvi_valid:
@@ -635,7 +823,7 @@ def run_pipeline(
             generate_forest_loss_png(final_loss_mask, after_spec, loss_png_path)
 
         ndvi_png_path = proj_results_dir / "ndvi_overlay.png"
-        _ndvi_overlay_png(before_norm, after_norm, ndvi_png_path)
+        _ndvi_overlay_png(before_spec, after_spec, ndvi_png_path)
 
         # ── 11. NDVI stats ────────────────────────────────────────────────────
         ndvi_before_stats = ndvi_stats(ndvi_before)
@@ -673,8 +861,9 @@ def run_pipeline(
         artifacts = [p for p in (loss_png_path, ndvi_png_path) if p.exists()]
         mlflow_run_id = None
         mlflow_tracking_uri = None
+        mlflow_experiment_id = None
         try:
-            mlflow_run_id, mlflow_tracking_uri = log_run(
+            mlflow_run_id, mlflow_tracking_uri, mlflow_experiment_id = log_run(
                 mlflow_params,
                 mlflow_metrics_clean,
                 artifacts,
@@ -725,6 +914,7 @@ def run_pipeline(
             "ndvi_overlay_url": f"/static/{project_id}/ndvi_overlay.png",
             "mlflow_run_id": mlflow_run_id,
             "mlflow_tracking_uri": mlflow_tracking_uri,
+            "mlflow_experiment_id": mlflow_experiment_id,
             "warnings": warnings,
             "diagnostics": diagnostics,
         }

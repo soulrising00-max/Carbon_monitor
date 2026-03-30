@@ -144,6 +144,30 @@ def _cmr_search_bbox(short_name: str, bbox: tuple, year: int) -> list[dict]:
         resp = requests.get(url, timeout=60)
         resp.raise_for_status()
         return resp.json().get("feed", {}).get("entry", [])
+    except requests.exceptions.ProxyError as exc:
+        logger.warning(
+            "CMR search failed via configured proxy for %s / %s / %d: %s. "
+            "Retrying without environment proxies.",
+            short_name,
+            bbox,
+            year,
+            exc,
+        )
+        try:
+            with requests.Session() as session:
+                session.trust_env = False
+                resp = session.get(url, timeout=60)
+                resp.raise_for_status()
+                return resp.json().get("feed", {}).get("entry", [])
+        except Exception as retry_exc:
+            logger.warning(
+                "CMR retry without proxies failed for %s / %s / %d: %s",
+                short_name,
+                bbox,
+                year,
+                retry_exc,
+            )
+            return []
     except Exception as exc:
         logger.warning(
             "CMR search failed for %s / %s / %d: %s", short_name, bbox, year, exc
@@ -186,8 +210,6 @@ def search_scenes(
     entries_s30 = _cmr_search_bbox("HLSS30", bbox, year)
 
     raw_entries = entries_l30 + entries_s30
-    print("Scenes found before filtering:", len(raw_entries))
-
     seen: set[str] = set()
     filtered_scenes: list[dict] = []
 
@@ -237,7 +259,6 @@ def search_scenes(
             }
         )
 
-    print("Scenes after filtering:", len(filtered_scenes))
     filtered_scenes.sort(key=lambda x: x["cloud_cover"])
     return filtered_scenes
 

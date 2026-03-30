@@ -2,6 +2,7 @@
 Central config. All tunable values live here.
 Import with: from configs.settings import settings
 """
+
 from pydantic_settings import BaseSettings
 from pydantic import ConfigDict
 from pathlib import Path
@@ -22,30 +23,31 @@ class Settings(BaseSettings):
     EARTHDATA_PASSWORD: str = ""
 
     # HLS download
-    CLOUD_COVER_THRESHOLD: float = 0.30   # max acceptable scene cloud cover
-    SCENES_PER_YEAR: int = 3              # top-N least cloudy scenes for compositing
+    CLOUD_COVER_THRESHOLD: float = 0.30  # max acceptable scene cloud cover
+    SCENES_PER_YEAR: int = 6  # was 3 — more scenes increases chance of full coverage
+    SCENE_SEARCH_YEAR_WINDOW: int = 2  # ADD this line
     HLS_BANDS: list[str] = ["B02", "B03", "B04", "B8A", "B11", "B12", "Fmask"]
     # Band order for model input: [Blue, Green, Red, NIR, SWIR1, SWIR2]
 
     # Biome NDVI thresholds (keyed by biome name)
     NDVI_THRESHOLDS: dict = {
-        "tropical":    0.50,
+        "tropical": 0.50,
         "subtropical": 0.35,
-        "temperate":   0.25,
+        "temperate": 0.25,
     }
 
     # Biome sequestration rates tCO2/ha/yr (IPCC Tier 1 defaults)
     SEQUESTRATION_RATES: dict = {
-        "tropical":    12.0,
-        "subtropical":  4.0,
-        "temperate":    6.0,
+        "tropical": 12.0,
+        "subtropical": 4.0,
+        "temperate": 6.0,
     }
 
     # Risk scoring
-    RISK_THRESHOLD: float = 0.05          # above this = HIGH risk
+    RISK_THRESHOLD: float = 0.05  # above this = HIGH risk
     PATCH_SIZE: int = 128
-    MIN_VALID_NDVI_FRACTION: float = 0.10
-    MIN_VALID_NDVI_PIXELS: int = 1000
+    MIN_VALID_NDVI_FRACTION: float = 0.05
+    MIN_VALID_NDVI_PIXELS: int = 100
 
     # MLflow
     MLFLOW_EXPERIMENT_NAME: str = "carbon-monitor"

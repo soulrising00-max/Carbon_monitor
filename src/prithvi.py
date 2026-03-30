@@ -7,6 +7,11 @@ Replaces Prithvi-100M with a lightweight U-Net (ForestUNet) that:
   - Falls back to random weights with a warning when no .pth file is found
   - Exposes identical function signatures so pipeline.py needs zero changes
 
+Model input: 12 bands — before (6) + after (6) stacked along the channel axis.
+  patch["before"]: (6, 128, 128)  — normalised spectral bands from year_before
+  patch["after"]:  (6, 128, 128)  — normalised spectral bands from year_after
+  stacked:         (12, 128, 128) — fed to ForestUNet
+
 Upgrade path:
   1. Train on Kaggle (see notebooks/training.ipynb)
   2. Download unet_forest.pth
@@ -24,6 +29,67 @@ logger = logging.getLogger(__name__)
 
 # Default weight path — resolved relative to repo root
 _DEFAULT_WEIGHTS = Path(__file__).parent.parent / "ml_models" / "unet_forest.pth"
+
+
+# ---------------------------------------------------------------------------
+# Checkpoint key remapping
+# ---------------------------------------------------------------------------
+
+def _remap_state_dict(state: dict) -> dict:
+    """
+    Translate checkpoint keys saved by the Kaggle training notebook's inline
+    ForestUNet (short attribute names) to the keys expected by models/unet.py
+    (long attribute names).
+
+    Notebook attribute names  →  unet.py attribute names:
+        inc.b.*         → inc.block.*
+        d1.b.1.b.*      → down1.block.1.block.*
+        d2.b.1.b.*      → down2.block.1.block.*
+        d3.b.1.b.*      → down3.block.1.block.*
+        d4.b.1.b.*      → down4.block.1.block.*
+        u1.c.b.*        → up1.conv.block.*
+        u2.c.b.*        → up2.conv.block.*
+        u3.c.b.*        → up3.conv.block.*
+        u4.c.b.*        → up4.conv.block.*
+        out.*           → out_conv.*
+
+    If the keys already match (i.e. the checkpoint was saved from unet.py
+    directly), the state dict is returned unchanged.
+    """
+    # Quick check: if the expected keys are already present, skip remapping
+    first_key = next(iter(state), "")
+    if first_key.startswith("inc.block") or first_key.startswith("down"):
+        return state
+
+    # Ordered replacement rules — more specific patterns must come first
+    # so that e.g. "d1.b.1.b." is matched before a hypothetical "d1.b."
+    _RULES = [
+        # Encoder blocks (Down wraps DoubleConv, so two levels of .block)
+        ("d1.b.1.b.", "down1.block.1.block."),
+        ("d2.b.1.b.", "down2.block.1.block."),
+        ("d3.b.1.b.", "down3.block.1.block."),
+        ("d4.b.1.b.", "down4.block.1.block."),
+        # Decoder blocks (Up uses .conv which contains DoubleConv)
+        ("u1.c.b.", "up1.conv.block."),
+        ("u2.c.b.", "up2.conv.block."),
+        ("u3.c.b.", "up3.conv.block."),
+        ("u4.c.b.", "up4.conv.block."),
+        # Input conv
+        ("inc.b.", "inc.block."),
+        # Output head
+        ("out.", "out_conv."),
+    ]
+
+    remapped = {}
+    for old_key, tensor in state.items():
+        new_key = old_key
+        for old_prefix, new_prefix in _RULES:
+            if old_key.startswith(old_prefix):
+                new_key = new_prefix + old_key[len(old_prefix):]
+                break
+        remapped[new_key] = tensor
+
+    return remapped
 
 
 # ---------------------------------------------------------------------------
@@ -53,14 +119,21 @@ def load_prithvi_model(device: str = "cpu"):
         import torch
         from models.unet import ForestUNet
 
-        model = ForestUNet(in_channels=6, base_features=64)
+        model = ForestUNet(in_channels=12, base_features=64)
 
         weights_path = _DEFAULT_WEIGHTS
         if weights_path.exists():
-            state = torch.load(weights_path, map_location=device)
+            checkpoint = torch.load(weights_path, map_location=device)
+
             # Support both raw state_dict and checkpoint dicts
-            if isinstance(state, dict) and "model_state_dict" in state:
-                state = state["model_state_dict"]
+            if isinstance(checkpoint, dict) and "model_state_dict" in checkpoint:
+                state = checkpoint["model_state_dict"]
+            else:
+                state = checkpoint
+
+            # Remap short notebook keys → long unet.py keys if needed
+            state = _remap_state_dict(state)
+
             model.load_state_dict(state)
             logger.info("Loaded U-Net weights from %s", weights_path)
         else:
@@ -76,7 +149,7 @@ def load_prithvi_model(device: str = "cpu"):
 
         config = {
             "model_type": "ForestUNet",
-            "in_channels": 6,
+            "in_channels": 12,
             "base_features": 64,
             "patch_size": 128,
             "weights_loaded": weights_path.exists(),
@@ -89,12 +162,14 @@ def load_prithvi_model(device: str = "cpu"):
         raise RuntimeError(f"Prithvi load failed: {e}") from e
 
 
-def run_prithvi_inference(patch: np.ndarray, model, config) -> np.ndarray:
+def run_prithvi_inference(patch: dict, model, config) -> np.ndarray:
     """
-    Run forest segmentation on a single patch.
+    Run forest segmentation on a single before/after patch pair.
 
     Args:
-        patch:  shape (6, 128, 128), float32, bands normalized to [0, 1]
+        patch:  dict with keys:
+                  "before" — np.ndarray (6, 128, 128), float32, bands normalised to [0, 1]
+                  "after"  — np.ndarray (6, 128, 128), float32, bands normalised to [0, 1]
         model:  ForestUNet instance returned by load_prithvi_model()
         config: config dict returned by load_prithvi_model()
 
@@ -110,8 +185,11 @@ def run_prithvi_inference(patch: np.ndarray, model, config) -> np.ndarray:
 
         device = config.get("device", "cpu")
 
-        # (6, H, W) → (1, 6, H, W)
-        tensor = torch.from_numpy(patch).float().unsqueeze(0).to(device)
+        # Stack before + after along channel axis: (6,H,W) + (6,H,W) → (12,H,W)
+        stacked = np.concatenate([patch["before"], patch["after"]], axis=0)  # (12, 128, 128)
+
+        # (12, H, W) → (1, 12, H, W)
+        tensor = torch.from_numpy(stacked).float().unsqueeze(0).to(device)
 
         with torch.no_grad():
             logits = model(tensor)          # (1, 1, 128, 128)

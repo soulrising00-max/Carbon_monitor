@@ -10,7 +10,8 @@ def hls_invalid_pixel_mask(data: np.ndarray, qa_band: np.ndarray | None = None) 
     """Return True where pixels are invalid due to nodata, non-finite values, or QA flags."""
     spectral = data[:6]
     invalid = ~np.all(np.isfinite(spectral), axis=0)
-    invalid |= np.all(spectral == 0, axis=0)
+    invalid |= np.all(spectral == 0, axis=0)       # rasterio clip fill value
+    invalid |= np.any(spectral == -9999, axis=0)   # HLS native nodata (int16 fill)
 
     if qa_band is not None:
         qa = qa_band.astype(np.uint8)

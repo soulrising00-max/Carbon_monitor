@@ -111,6 +111,10 @@ def generate_forest_loss_png(
 
     clipped_raster band order: [Blue=0, Green=1, Red=2, NIR=3, SWIR1=4, SWIR2=5]
     """
+    import matplotlib
+
+    matplotlib.use("Agg")
+
     import matplotlib.pyplot as plt
 
     save_path = Path(save_path)

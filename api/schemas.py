@@ -3,14 +3,14 @@ Pydantic v2 schemas for the Carbon Monitor API.
 """
 
 from typing import Optional
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 class AnalyzeRequest(BaseModel):
     geojson: dict
     start_year: int
     end_year: int
-    annual_offset_tco2: Optional[float] = None
+    annual_offset_tco2: float | None = None
 
 
 class AnalyzeResponse(BaseModel):
@@ -42,4 +42,5 @@ class ResultsResponse(BaseModel):
     ndvi_overlay_url: Optional[str] = None
     mlflow_run_id: Optional[str] = None
     mlflow_tracking_uri: Optional[str] = None
-    warnings: list[str] = []
+    mlflow_experiment_id: Optional[str] = None
+    warnings: list[str] = Field(default_factory=list)
