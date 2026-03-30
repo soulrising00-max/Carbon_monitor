@@ -17,3 +17,5 @@ results/
 results
 mlruns/
 mlruns
+*.zip
+*.tar.gz
