@@ -19,3 +19,4 @@ mlruns/
 mlruns
 *.zip
 *.tar.gz
+*.pth
